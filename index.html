@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>弹珠机概率统计器</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:Arial;background:linear-gradient(135deg,#667eea,#764ba2);padding:20px}
+.container{max-width:900px;margin:auto;background:white;border-radius:20px;padding:25px}
+h1{text-align:center;margin-bottom:20px}
+.sect{text-align:center;margin-bottom:20px}
+input,select,button{padding:8px 12px;margin:3px}
+.drop-position{display:flex;justify-content:center;gap:15px;margin-bottom:20px}
+.drop-position button{padding:12px 30px;font-size:16px;font-weight:bold;border-radius:8px;border:2px solid #ccc;background:#f5f5f5;cursor:pointer;transition:all 0.3s}
+.drop-position button:hover{background:#e0e0e0}
+.drop-position button.active{background:#2196F3;color:#fff;border-color:#2196F3}
+.mode-btns{text-align:center;margin-bottom:15px}
+.mode-btns button{padding:8px 16px;margin:0 3px;border-radius:6px;border:1px solid #ccc;background:#f5f5f5;cursor:pointer}
+.mode-btns button.active{background:#ff9800;color:#fff;border-color:#ff9800}
+.holes{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}
+.hole{text-align:center;padding:10px;background:#f5f5f5;border-radius:10px}
+.hole-btns{display:flex;justify-content:center;gap:8px;margin:8px 0}
+.hole-btns button{width:40px;height:40px;border-radius:50%;border:none;font-size:18px;font-weight:bold;cursor:pointer;transition:transform 0.1s}
+.hole-btns button:active{transform:scale(0.95)}
+.add{background:#f44336;color:#fff}
+.remove{background:#4CAF50;color:#fff}
+.top{color:red;font-weight:bold}
+.total-count{text-align:center;font-size:18px;font-weight:bold;color:#333;margin-bottom:15px;padding:10px;background:#e3f2fd;border-radius:8px}
+.chart{display:flex;align-items:flex-end;height:320px;gap:6px;margin-top:20px;padding:0 10px}
+.bar-wrap{flex:1;text-align:center;position:relative}
+.bar-count{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);font-size:12px;font-weight:bold;color:#333;margin-bottom:4px;white-space:nowrap}
+.bar-count.top{color:red}
+.bar{background:#4CAF50;border-radius:5px 5px 0 0;transition:height 0.3s ease}
+.bar.top{background:#f44336}
+.bar-percent{margin-top:5px;font-size:11px;color:#666}
+.bar-percent.top{color:red;font-weight:bold}
+</style>
+</head>
+
+<body>
+<div class="container">
+
+<h1>弹珠机概率统计器</h1>
+
+<div class="sect">
+<input id="newMachine" placeholder="新机器名称">
+<button onclick="addMachine()">添加</button>
+<select id="machineList" onchange="changeMachine()"></select>
+<button onclick="deleteMachine()">删除</button>
+</div>
+
+<div class="drop-position">
+<button id="left" onclick="setSide('left')">左</button>
+<button id="center" onclick="setSide('center')" class="active">中</button>
+<button id="right" onclick="setSide('right')">右</button>
+<button id="all" onclick="setSide('all')">全部</button>
+</div>
+
+<div class="mode-btns">
+<button id="mode_total" onclick="setMode('total')" class="active">总</button>
+<button id="mode_50" onclick="setMode(50)">近50</button>
+<button id="mode_100" onclick="setMode(100)">近100</button>
+<button id="mode_300" onclick="setMode(300)">近300</button>
+</div>
+
+<div id="totalCount" class="total-count">总次数: 0</div>
+
+<div id="holes" class="holes"></div>
+<div id="chart" class="chart"></div>
+
+</div>
+
+<script>
+
+const KEY="pachinko_v5"
+let machines={},curMachine="default",curSide="center",mode="total"
+
+const names=["左1","左2","左3","左4","左5","左6","右6","右5","右4","右3","右2","右1"]
+
+function empty(){
+return{
+left:new Array(12).fill(0),
+center:new Array(12).fill(0),
+right:new Array(12).fill(0),
+history:{left:[],center:[],right:[]}
+}}
+
+function load(){
+let d=localStorage.getItem(KEY)
+machines=d?JSON.parse(d):{default:empty()}
+}
+
+function save(){localStorage.setItem(KEY,JSON.stringify(machines))}
+
+function addMachine(){
+let n=newMachine.value.trim()
+if(!n||machines[n])return
+machines[n]=empty();curMachine=n
+save();fill();render()
+}
+
+function deleteMachine(){
+if(Object.keys(machines).length===1)return
+delete machines[curMachine]
+curMachine=Object.keys(machines)[0]
+save();fill();render()
+}
+
+function fill(){
+machineList.innerHTML=""
+Object.keys(machines).forEach(m=>{
+let o=document.createElement("option")
+o.value=m;o.textContent=m
+if(m==curMachine)o.selected=true
+machineList.appendChild(o)
+})
+}
+
+function changeMachine(){curMachine=machineList.value;render()}
+
+function setSide(s){
+curSide=s
+document.querySelectorAll(".drop-position button").forEach(b=>b.classList.remove("active"))
+document.getElementById(s).classList.add("active")
+render()
+}
+
+function setMode(m){
+mode=m
+document.querySelectorAll(".mode-btns button").forEach(b=>b.classList.remove("active"))
+document.getElementById("mode_"+m).classList.add("active")
+render()
+}
+
+function getArr(){
+if(mode==="total"){
+if(curSide!="all")return machines[curMachine][curSide]
+let a=new Array(12).fill(0)
+;["left","center","right"].forEach(s=>{
+machines[curMachine][s].forEach((v,i)=>a[i]+=v)})
+return a
+}
+
+let hist = machines[curMachine].history[curSide]
+let recent = hist.slice(-mode)
+let arr=new Array(12).fill(0)
+recent.forEach(i=>arr[i]++)
+return arr
+}
+
+function getTotalCount(){
+if(curSide==="all"){
+return machines[curMachine].left.reduce((a,b)=>a+b,0) +
+       machines[curMachine].center.reduce((a,b)=>a+b,0) +
+       machines[curMachine].right.reduce((a,b)=>a+b,0)
+}
+return machines[curMachine][curSide].reduce((a,b)=>a+b,0)
+}
+
+function add(i){
+if(curSide==="all")return
+machines[curMachine][curSide][i]++
+machines[curMachine].history[curSide].push(i)
+save();render()
+}
+
+function sub(i){
+if(curSide==="all")return
+if(machines[curMachine][curSide][i]>0){
+machines[curMachine][curSide][i]--
+// 从历史记录中移除最后一次该洞口的记录
+let hist = machines[curMachine].history[curSide]
+let lastIndex = hist.lastIndexOf(i)
+if(lastIndex!==-1){
+hist.splice(lastIndex,1)
+}
+save();render()
+}}
+
+function render(){
+
+let arr=getArr()
+let total=arr.reduce((a,b)=>a+b,0)
+let totalCount=getTotalCount()
+
+// 更新总次数显示
+document.getElementById("totalCount").textContent = 
+  curSide==="all" ? `总次数: ${totalCount}` : `${curSide==="left"?"左":curSide==="right"?"右":"中"}侧总次数: ${totalCount}`
+
+let sorted=arr.map((v,i)=>({v,i})).sort((a,b)=>b.v-a.v).slice(0,3).map(x=>x.i)
+
+holes.innerHTML=""
+arr.forEach((n,i)=>{
+let d=document.createElement("div")
+let cls=sorted.includes(i)?"top":""
+d.className="hole"
+d.innerHTML=`
+<h3 class="${cls}">${names[i]}</h3>
+<div class="hole-btns">
+<button class="remove" onclick="sub(${i})">−</button>
+<button class="add" onclick="add(${i})">+</button>
+</div>
+<div class="${cls}">${n}</div>`
+holes.appendChild(d)
+})
+
+chart.innerHTML=""
+let max=Math.max(...arr,1)
+arr.forEach((n,i)=>{
+let p=total?(n/total*100):0
+let h=n/max*250
+let isTop=sorted.includes(i)
+let w=document.createElement("div")
+w.className="bar-wrap"
+w.innerHTML=`
+<div class="bar-count ${isTop?'top':''}">${n}次</div>
+<div class="bar ${isTop?'top':''}" style="height:${h}px"></div>
+<div class="bar-percent ${isTop?'top':''}">${p.toFixed(1)}%</div>`
+chart.appendChild(w)
+})
+
+}
+
+load();fill();setSide("center")
+
+</script>
+</body>
+</html>
